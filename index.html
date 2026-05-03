@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Circle Gomoku</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#080814;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100vh;font-family:'Segoe UI',Meiryo,Arial,sans-serif;color:#ddd;user-select:none;
+  padding:8px;
+}
+h1{font-size:clamp(13px,3vw,20px);letter-spacing:clamp(3px,1.5vw,8px);color:#333;margin-bottom:10px;text-transform:uppercase}
+#hud{display:flex;align-items:stretch;gap:clamp(6px,2vw,16px);width:100%;max-width:800px;margin-bottom:8px}
+.pcard{flex:1;border-radius:10px;padding:clamp(6px,2vw,12px) clamp(8px,2.5vw,18px);text-align:center;transition:opacity .3s,box-shadow .3s}
+.p1{background:rgba(200,50,50,.12);border:2px solid #993333}
+.p2{background:rgba(50,50,200,.12);border:2px solid #333399}
+.pcard.on.p1{border-color:#ff4444;box-shadow:0 0 22px #ff2222}
+.pcard.on.p2{border-color:#4444ff;box-shadow:0 0 22px #2222ff}
+.pcard.off{opacity:.28}
+.pname{font-size:clamp(9px,2vw,11px);letter-spacing:2px;color:#666;margin-bottom:4px;text-transform:uppercase}
+.pcnt{font-size:clamp(18px,5vw,30px);font-weight:bold}
+.p1 .pcnt{color:#ff5555}.p2 .pcnt{color:#5555ff}
+.psub{font-size:clamp(9px,2vw,11px);color:#444;margin-top:3px}
+#mid{min-width:clamp(60px,14vw,110px);text-align:center;display:flex;flex-direction:column;
+     align-items:center;justify-content:center;gap:4px}
+#mid-label{font-size:clamp(8px,2vw,10px);letter-spacing:2px;color:#444;text-transform:uppercase}
+#mid-val{font-size:clamp(16px,5vw,26px);font-weight:bold}
+#wrap{position:relative;width:100%;max-width:800px}
+canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radius:6px;cursor:crosshair;touch-action:none}
+#msg{margin-top:8px;font-size:clamp(11px,3vw,14px);text-align:center;color:#555;letter-spacing:1px;min-height:18px;width:100%;max-width:800px}
+#rules{margin-top:6px;font-size:clamp(9px,2.2vw,11px);color:#2a2a3a;text-align:center;max-width:800px;line-height:1.7;padding:0 4px}
+#over{display:none;position:absolute;inset:0;background:rgba(4,4,16,.88);border-radius:6px;
+      flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#over.show{display:flex}
+#over-title{font-size:clamp(22px,7vw,36px);font-weight:bold;letter-spacing:3px}
+#btn-restart{padding:10px 38px;font-size:clamp(12px,3.5vw,15px);letter-spacing:3px;text-transform:uppercase;
+  background:#111;color:#aaa;border:2px solid #2a2a3a;border-radius:8px;
+  cursor:pointer;transition:all .2s}
+#btn-restart:hover{background:#1a1a2e;border-color:#555;color:#eee}
+#start{position:absolute;inset:0;background:rgba(4,4,16,.96);border-radius:6px;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+#start-label{font-size:clamp(9px,2.5vw,11px);letter-spacing:3px;color:#444;text-transform:uppercase}
+.btn-mode{padding:12px 0;font-size:clamp(12px,3.5vw,14px);letter-spacing:2px;text-transform:uppercase;
+  background:#111;color:#888;border:2px solid #2a2a3a;border-radius:8px;
+  cursor:pointer;transition:all .2s;width:clamp(160px,50vw,220px)}
+#btn-pvp:hover,#btn-pvp:active{background:#1a1010;border-color:#993333;color:#ff8888}
+#btn-cpu:hover,#btn-cpu:active{background:#10101a;border-color:#333399;color:#8888ff}
+</style>
+</head>
+<body>
+<h1>Circle Gomoku</h1>
+
+<div id="hud">
+  <div class="pcard p1 on" id="pc1">
+    <div class="pname">Player 1</div>
+    <div class="pcnt" id="cnt1">0</div>
+    <div class="psub">circles</div>
+  </div>
+  <div id="mid">
+    <div id="mid-label">TURN</div>
+    <div id="mid-val" id="turn-val" style="color:#ff5555">P1</div>
+  </div>
+  <div class="pcard p2 off" id="pc2">
+    <div class="pname" id="p2name">Player 2</div>
+    <div class="pcnt" id="cnt2">0</div>
+    <div class="psub">circles</div>
+  </div>
+</div>
+
+<div id="wrap">
+  <canvas id="cv" width="800" height="540"></canvas>
+  <div id="start">
+    <div id="start-label">Mode Select</div>
+    <button class="btn-mode" id="btn-pvp">👥 Player vs Player</button>
+    <button class="btn-mode" id="btn-cpu">🤖 Player vs CPU</button>
+  </div>
+  <div id="over">
+    <div id="over-title">WINNER!</div>
+    <button id="btn-restart">RESTART</button>
+  </div>
+</div>
+<div id="msg">クリックして最初の円を置いてください</div>
+<div id="rules">
+  先に5個を直線に並べた方が勝ち ／ 円の中の数字は「気」（同色の隣人数＋1） ／
+  ⚠黄色の円はアタリ（捕獲される危険あり） ／ 圧力（接する相手の円数）＞ 気 で捕獲 ／
+  2手目以降は自分か相手の円に接する位置にのみ配置可
+</div>
+
+<script>
+const W = 800, H = 540;
+const R = 36;          // 円の半径
+const WIN_N = 5;       // 勝利に必要な連結数
+const SNAP_DIST = 2*R; // スナップ距離（ちょうど接触）
+const SNAP_RANGE = R * 3.5; // クリック有効範囲
+
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const msgEl = document.getElementById('msg');
+const overEl = document.getElementById('over');
+const overTitle = document.getElementById('over-title');
+
+let circles  = [];  // {x, y, r, p}
+let turn     = 1;
+let state    = 'play'; // 'play' | 'over'
+let winGroup = [];
+let mouse    = null;
+let snapPos  = null;  // 現在のスナップ候補位置
+let mode     = 'pvp'; // 'pvp' | 'cpu'
+const CPU_PL    = 2;
+const CPU_DELAY = 750; // ms
+
+// ---- 幾何 ----
+function d2(a, b) { return (a.x-b.x)**2 + (a.y-b.y)**2; }
+function touching(a, b) { return d2(a, b) < (2*R + 2)**2; }
+
+// 角度差（絶対値、π以下に正規化）
+function angDiff(a, b) {
+  let d = ((a - b) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+  return Math.abs(d);
+}
+
+const ANGLE_TOL = Math.PI / 6; // 30°
+
+// ---- スナップ位置を求める ----
+// クリック地点 (mx,my) に対して配置できる最適な円の位置を返す
+function findSnap(mx, my) {
+  // 1手目：盤内ならどこでも
+  if (circles.length === 0) {
+    return {
+      x: Math.max(R+4, Math.min(W-R-4, mx)),
+      y: Math.max(R+4, Math.min(H-R-4, my))
+    };
+  }
+
+  // 近い円から順に試みる
+  const cands = circles
+    .map(c => ({ c, d: Math.hypot(mx-c.x, my-c.y) }))
+    .filter(({d}) => d > R*0.3 && d <= SNAP_RANGE) // 円の内部すぎるものと遠すぎるものを除外
+    .sort((a, b) => a.d - b.d);
+
+  for (const {c} of cands) {
+    const angle = Math.atan2(my - c.y, mx - c.x);
+    const sx = c.x + Math.cos(angle) * SNAP_DIST;
+    const sy = c.y + Math.sin(angle) * SNAP_DIST;
+
+    // 盤端チェック
+    if (sx < R+4 || sx > W-R-4 || sy < R+4 || sy > H-R-4) continue;
+
+    // 既存の円と重ならないかチェック
+    if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) continue;
+
+    // 禁手チェック（案1）：自殺手は不可。ただし同時に相手を捕獲できる場合は例外
+    if (circles.length > 0) {
+      const opp2 = turn === 1 ? 2 : 1;
+      const tmp = {x: sx, y: sy, r: R, p: turn};
+      circles.push(tmp);
+      const newQi   = getQi(tmp);
+      const newPress = getPressure(tmp, opp2);
+      const wouldCapture = live().some(c =>
+        c !== tmp && c.p === opp2 && touching(c, tmp) && getPressure(c, turn) > getQi(c)
+      );
+      circles.pop();
+      if (newPress > newQi && !wouldCapture) continue; // 自殺手→スキップ
+    }
+
+    return {x: sx, y: sy};
+  }
+  return null;
+}
+
+// ---- 勝利判定（バックトラッキングDFS） ----
+function checkWin(pl) {
+  const pc = circles.filter(c => c.p === pl && !c.dying);
+
+  function dfs(chain, curDir, used) {
+    if (chain.length >= WIN_N) return chain;
+    const last = chain[chain.length - 1];
+    for (const c of pc) {
+      if (used.has(c) || !touching(last, c)) continue;
+      const nd = Math.atan2(c.y - last.y, c.x - last.x);
+      if (angDiff(nd, curDir) > ANGLE_TOL) continue;
+      used.add(c);
+      const r = dfs([...chain, c], nd, used);
+      used.delete(c);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  for (const a of pc) {
+    for (const b of pc) {
+      if (a === b || !touching(a, b)) continue;
+      const dir = Math.atan2(b.y - a.y, b.x - a.x);
+      const used = new Set([a, b]);
+      const r = dfs([a, b], dir, used);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+// ---- 直線チェーン列挙（バックトラッキングDFS、描画用3個以上） ----
+function getLineChains(pl) {
+  const pc = circles.filter(c => c.p === pl && !c.dying);
+  if (pc.length < 3) return [];
+  const seen = new Set();
+  const chains = [];
+
+  function dfs(chain, curDir, used) {
+    const last = chain[chain.length - 1];
+    let extended = false;
+    for (const c of pc) {
+      if (used.has(c) || !touching(last, c)) continue;
+      const nd = Math.atan2(c.y - last.y, c.x - last.x);
+      if (angDiff(nd, curDir) > ANGLE_TOL) continue;
+      extended = true;
+      used.add(c);
+      dfs([...chain, c], nd, used);
+      used.delete(c);
+    }
+    // 延伸できなくなった（末端）かつ長さ3以上のチェーンを記録
+    if (!extended && chain.length >= 3) {
+      const key = chain.map(c => circles.indexOf(c)).sort((a,b)=>a-b).join(',');
+      if (!seen.has(key)) { seen.add(key); chains.push([...chain]); }
+    }
+  }
+
+  for (const a of pc) {
+    for (const b of pc) {
+      if (a === b || !touching(a, b)) continue;
+      const dir = Math.atan2(b.y - a.y, b.x - a.x);
+      const used = new Set([a, b]);
+      dfs([a, b], dir, used);
+    }
+  }
+
+  // サブチェーン（より長いチェーンの部分集合）を除去
+  return chains.filter(chain =>
+    !chains.some(other => other.length > chain.length && chain.every(c => other.includes(c)))
+  );
+}
+
+
+// ---- 気（qi）システム ----
+// 生きている（dying でない）円だけを返す
+function live() { return circles.filter(c => !c.dying); }
+
+// 円の気 = 1 + 接している同色の生きている円の数
+function getQi(c) {
+  return 1 + live().filter(o => o !== c && o.p === c.p && touching(o, c)).length;
+}
+
+// 円に接している指定プレイヤーの生きている円の数（圧力）
+function getPressure(c, byPl) {
+  return live().filter(o => o.p === byPl && touching(o, c)).length;
+}
+
+// 気による捕獲処理：newCircle を置いた後、圧力 > 気 の相手円を捕獲
+function doQiCaptures(newCircle, pl) {
+  const opp = pl === 1 ? 2 : 1;
+  const toCapture = live().filter(c => {
+    if (c.p !== opp || !touching(c, newCircle)) return false;
+    return getPressure(c, pl) > getQi(c);
+  });
+  if (toCapture.length === 0) return 0;
+
+  const t = performance.now();
+  toCapture.forEach(c => { c.dying = true; c.dyingAt = t; });
+  setTimeout(() => { circles = circles.filter(c => !c.dying); }, 650);
+  return toCapture.length;
+}
+
+// ---- CPU AI ----
+// 配置可能な候補座標を列挙
+function getCandidates() {
+  if (circles.length === 0) return [{x: W/2, y: H/2}];
+  const cands = [];
+  const STEPS = 36; // 10°刻み
+  for (const c of circles) {
+    for (let i = 0; i < STEPS; i++) {
+      const angle = (i / STEPS) * Math.PI * 2;
+      const sx = c.x + Math.cos(angle) * SNAP_DIST;
+      const sy = c.y + Math.sin(angle) * SNAP_DIST;
+      if (sx < R+4 || sx > W-R-4 || sy < R+4 || sy > H-R-4) continue;
+      if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) continue;
+      if (cands.some(p => Math.hypot(p.x-sx, p.y-sy) < 6)) continue; // 重複除去
+      // 自殺手チェック（CPUも同じルール）
+      const oppC = CPU_PL === 1 ? 2 : 1;
+      const tmpC = {x: sx, y: sy, r: R, p: CPU_PL};
+      circles.push(tmpC);
+      const qiC    = getQi(tmpC);
+      const pressC = getPressure(tmpC, oppC);
+      const captC  = live().some(o =>
+        o !== tmpC && o.p === oppC && touching(o, tmpC) && getPressure(o, CPU_PL) > getQi(o)
+      );
+      circles.pop();
+      if (pressC > qiC && !captC) continue;
+      cands.push({x: sx, y: sy});
+    }
+  }
+  return cands;
+}
+
+// 候補位置のスコアを計算
+function scoreMove(pos) {
+  const opp = 1;
+
+  // CPUが置いた場合
+  const tmp = {x: pos.x, y: pos.y, r: R, p: CPU_PL};
+  circles.push(tmp);
+  if (checkWin(CPU_PL)) { circles.pop(); return 10000; }
+  const myChains = getLineChains(CPU_PL).filter(ch => ch.includes(tmp));
+  const myBest   = myChains.reduce((m, ch) => Math.max(m, ch.length), 1);
+  // 気で捕獲できる相手の円の数
+  const captureCount = live().filter(c => {
+    if (c.p !== opp || !touching(c, tmp)) return false;
+    return getPressure(c, CPU_PL) > getQi(c);
+  }).length;
+  circles.pop();
+
+  // 相手が置いた場合（ブロック評価）
+  const tmp2 = {x: pos.x, y: pos.y, r: R, p: opp};
+  circles.push(tmp2);
+  const oppWin    = !!checkWin(opp);
+  const oppChains = getLineChains(opp).filter(ch => ch.includes(tmp2));
+  const oppBest   = oppChains.reduce((m, ch) => Math.max(m, ch.length), 0);
+  circles.pop();
+
+  if (oppWin) return 5000;
+  return myBest * myBest * 20 + oppBest * 35 + captureCount * 280 + Math.random() * 8;
+}
+
+// CPUのターン処理
+function cpuTurn() {
+  if (state !== 'play' || turn !== CPU_PL) return;
+  const cands = getCandidates();
+  if (cands.length === 0) { turn = 1; updateHUD(); return; }
+
+  let best = null, bestScore = -Infinity;
+  for (const pos of cands) {
+    const s = scoreMove(pos);
+    if (s > bestScore) { bestScore = s; best = pos; }
+  }
+  if (!best) { turn = 1; updateHUD(); return; }
+
+  const newCircle = {x: best.x, y: best.y, r: R, p: CPU_PL};
+  circles.push(newCircle);
+
+  const won = checkWin(CPU_PL);
+  if (won) {
+    winGroup = won;
+    state = 'over';
+    overTitle.textContent = 'CPU WIN!';
+    overTitle.style.color = '#5555ff';
+    msgEl.textContent = `CPU が ${won.length} 個直線に並べました！`;
+    updateHUD();
+    setTimeout(() => overEl.classList.add('show'), 2500);
+    return;
+  }
+
+  const captured = doQiCaptures(newCircle, CPU_PL);
+  if (captured > 0) msgEl.textContent = `🤖 CPU が気で ${captured}個の円を取りました！`;
+
+  turn = 1;
+  snapPos = null;
+  updateHUD();
+}
+
+// ---- HUD更新 ----
+function updateHUD() {
+  document.getElementById('cnt1').textContent = circles.filter(c=>c.p===1).length;
+  document.getElementById('cnt2').textContent = circles.filter(c=>c.p===2).length;
+  document.getElementById('pc1').classList.toggle('on',  turn===1);
+  document.getElementById('pc1').classList.toggle('off', turn!==1);
+  document.getElementById('pc2').classList.toggle('on',  turn===2);
+  document.getElementById('pc2').classList.toggle('off', turn!==2);
+  const mv = document.getElementById('mid-val');
+  mv.textContent = `P${turn}`;
+  mv.style.color = turn===1 ? '#ff5555' : '#5555ff';
+  document.getElementById('p2name').textContent = mode === 'cpu' ? 'CPU' : 'Player 2';
+  if (state==='play') {
+    if (mode === 'cpu' && turn === CPU_PL)
+      msgEl.textContent = '🤖 CPU が考えています…';
+    else
+      msgEl.textContent = `Player ${turn} のターン`;
+  }
+}
+
+// ---- 描画 ----
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const now = performance.now();
+
+  // グリッド
+  ctx.strokeStyle = '#0d0d1a';
+  ctx.lineWidth = 1;
+  for (let x=0; x<=W; x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y=0; y<=H; y+=40){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // 配置可能ゾーン（既存円の周囲にうっすら点線リング）
+  if (state === 'play') {
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.lineWidth = 1;
+    for (const c of circles) {
+      ctx.strokeStyle = c.p===1 ? 'rgba(255,80,80,0.10)' : 'rgba(80,80,255,0.10)';
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, SNAP_DIST, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // 直線継続ゾーン（現在のターンプレイヤーの円から ±30° アーク）
+  if (state === 'play' && circles.length >= 2) {
+    const pc = circles.filter(c => c.p === turn);
+    ctx.save();
+    ctx.lineWidth = 2.5;
+    for (const c of pc) {
+      const nbrs = pc.filter(n => n !== c && touching(n, c));
+      for (const n of nbrs) {
+        const dir = Math.atan2(c.y - n.y, c.x - n.x); // n→c の延長方向
+        ctx.strokeStyle = turn === 1
+          ? 'rgba(255,160,80,0.55)'
+          : 'rgba(80,160,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, SNAP_DIST, dir - Math.PI/6, dir + Math.PI/6);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 接続ライン（同色・接触している円の間）
+  for (let i=0; i<circles.length; i++) {
+    for (let j=i+1; j<circles.length; j++) {
+      const a=circles[i], b=circles[j];
+      if (a.p!==b.p || !touching(a,b)) continue;
+      const isWin = winGroup.includes(a) && winGroup.includes(b);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = isWin
+        ? (a.p===1 ? 'rgba(255,180,0,0.85)' : 'rgba(100,200,255,0.85)')
+        : (a.p===1 ? 'rgba(255,80,80,0.30)'  : 'rgba(80,80,255,0.30)');
+      ctx.lineWidth = isWin ? 4 : 1.5;
+      ctx.stroke();
+    }
+  }
+
+  // 円本体
+  for (const c of circles) {
+    const isWin  = winGroup.includes(c);
+    const col1   = c.p===1 ? '#ff5555' : '#5577ff';
+    const col2   = c.p===1 ? '#441111' : '#111133';
+    const opp    = c.p===1 ? 2 : 1;
+    const qi     = getQi(c);
+    const press  = getPressure(c, opp);
+    const inAtari = !isWin && press > 0 && press >= qi; // 次に捕獲される危険
+
+    // dying（捕獲中）はフェードアウト
+    if (c.dying) {
+      const elapsed = performance.now() - c.dyingAt;
+      const alpha = Math.max(0, 1 - elapsed / 650);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowBlur = 18; ctx.shadowColor = '#ffffff';
+      ctx.beginPath(); ctx.arc(c.x, c.y, R + 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    // 勝利グループのグロー
+    if (isWin) {
+      const pulse = 0.65 + 0.35 * Math.sin(now/180);
+      ctx.save();
+      ctx.shadowBlur  = 22 * pulse;
+      ctx.shadowColor = c.p===1 ? '#ff9900' : '#44aaff';
+      ctx.strokeStyle = c.p===1 ? '#ffcc00' : '#66ccff';
+      ctx.lineWidth   = 3.5;
+      ctx.beginPath(); ctx.arc(c.x, c.y, R+5, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // アタリ警告リング（捕獲されそうな円）
+    if (inAtari) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 800); // ゆっくり「ぼうー」
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,200,0,${0.9 * pulse})`;
+      ctx.lineWidth = 3;
+      ctx.shadowBlur = 14 * pulse; ctx.shadowColor = '#ffcc00';
+      ctx.beginPath(); ctx.arc(c.x, c.y, R+5, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // グラデーション塗り
+    const g = ctx.createRadialGradient(c.x-R*0.3, c.y-R*0.3, R*0.05, c.x, c.y, R);
+    g.addColorStop(0, col1);
+    g.addColorStop(1, col2);
+    ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = isWin ? (c.p===1?'#ffcc00':'#66ccff') : col1;
+    ctx.lineWidth = 1.5; ctx.stroke();
+
+    // 気の数値を表示（アタリ中は黄色で強調）
+    ctx.fillStyle = inAtari ? 'rgba(255,220,50,0.95)' : 'rgba(255,255,255,0.45)';
+    ctx.font = `bold ${R*0.5}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(qi, c.x, c.y);
+  }
+
+  // 直線チェーンライン（円の上に描いて視認性を確保）
+  for (const pl of [1, 2]) {
+    const chains = getLineChains(pl);
+    for (const chain of chains) {
+      if (chain.length < 3) continue;
+      const t = Math.min(1, (chain.length - 1) / (WIN_N - 1)); // 0〜1
+      const alpha = 0.35 + t * 0.45;  // 0.35〜0.80
+      ctx.save();
+      ctx.strokeStyle = pl === 1
+        ? `rgba(255,200,100,${alpha})`
+        : `rgba(100,200,255,${alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(chain[0].x, chain[0].y);
+      for (let i = 1; i < chain.length; i++) ctx.lineTo(chain[i].x, chain[i].y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // スナップ位置プレビュー
+  if (mouse && state==='play') {
+    if (snapPos) {
+      const col = turn===1 ? 'rgba(255,80,80,0.28)' : 'rgba(80,80,255,0.28)';
+      const dotCol = turn===1 ? '#ff5555' : '#5577ff';
+      ctx.save();
+      // 半透明の円
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, R, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = dotCol;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4,3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // 中心ドット
+      ctx.fillStyle = dotCol;
+      ctx.shadowBlur = 6; ctx.shadowColor = dotCol;
+      ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    } else if (circles.length > 0) {
+      // 無効な位置 — 薄い×印
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,60,60,0.35)';
+      ctx.lineWidth = 2;
+      const s = 12;
+      ctx.beginPath();
+      ctx.moveTo(mouse.x-s, mouse.y-s); ctx.lineTo(mouse.x+s, mouse.y+s);
+      ctx.moveTo(mouse.x+s, mouse.y-s); ctx.lineTo(mouse.x-s, mouse.y+s);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ---- 座標変換ユーティリティ ----
+function canvasCoords(clientX, clientY) {
+  const r = cv.getBoundingClientRect();
+  return {
+    x: (clientX - r.left) * (W / r.width),
+    y: (clientY - r.top)  * (H / r.height)
+  };
+}
+
+// ---- 円の配置処理（マウス・タッチ共通） ----
+function handlePlace(mx, my) {
+  if (state !== 'play') return;
+  if (mode === 'cpu' && turn === CPU_PL) return;
+
+  const pos = findSnap(mx, my);
+  if (!pos) {
+    msgEl.textContent = '⚠ そこには置けません。既存の円に接する位置を選んでください';
+    return;
+  }
+
+  const newCircle = {x: pos.x, y: pos.y, r: R, p: turn};
+  circles.push(newCircle);
+
+  const won = checkWin(turn);
+  if (won) {
+    winGroup = won;
+    state = 'over';
+    overTitle.textContent = `PLAYER ${turn} WIN!`;
+    overTitle.style.color = turn===1 ? '#ff5555' : '#5555ff';
+    msgEl.textContent = `🎉 Player ${turn} が ${won.length} 個直線に並べました！`;
+    updateHUD();
+    setTimeout(() => overEl.classList.add('show'), 2500);
+    return;
+  }
+
+  const captured = doQiCaptures(newCircle, turn);
+  if (captured > 0) msgEl.textContent = `💨 ${captured}個の円を気で取りました！`;
+
+  turn = turn === 1 ? 2 : 1;
+  snapPos = findSnap(mx, my);
+  updateHUD();
+  if (mode === 'cpu' && turn === CPU_PL) setTimeout(cpuTurn, CPU_DELAY);
+}
+
+// ---- マウス入力 ----
+cv.addEventListener('mousemove', e => {
+  const {x, y} = canvasCoords(e.clientX, e.clientY);
+  mouse = {x, y};
+  if (state==='play') snapPos = findSnap(x, y);
+});
+cv.addEventListener('mouseleave', () => { mouse=null; snapPos=null; });
+cv.addEventListener('click', e => {
+  const {x, y} = canvasCoords(e.clientX, e.clientY);
+  handlePlace(x, y);
+});
+
+// ---- タッチ入力 ----
+cv.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const {x, y} = canvasCoords(t.clientX, t.clientY);
+  mouse = {x, y};
+  if (state==='play') snapPos = findSnap(x, y);
+}, {passive: false});
+
+cv.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const {x, y} = canvasCoords(t.clientX, t.clientY);
+  mouse = {x, y};
+  if (state==='play') snapPos = findSnap(x, y);
+}, {passive: false});
+
+cv.addEventListener('touchend', e => {
+  e.preventDefault();
+  // 指を離した位置で配置確定
+  const t = e.changedTouches[0];
+  const {x, y} = canvasCoords(t.clientX, t.clientY);
+  handlePlace(x, y);
+  mouse = null;
+  snapPos = null;
+}, {passive: false});
+
+function startGame(selectedMode) {
+  mode = selectedMode;
+  circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
+  document.getElementById('start').style.display = 'none';
+  overEl.classList.remove('show');
+  msgEl.textContent = 'クリックして最初の円を置いてください';
+  updateHUD();
+}
+
+document.getElementById('btn-pvp').addEventListener('click', () => startGame('pvp'));
+document.getElementById('btn-cpu').addEventListener('click', () => startGame('cpu'));
+
+document.getElementById('btn-restart').addEventListener('click', () => {
+  overEl.classList.remove('show');
+  document.getElementById('start').style.display = 'flex';
+  circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
+  msgEl.textContent = '';
+  updateHUD();
+});
+
+// ---- 起動 ----
+updateHUD();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
