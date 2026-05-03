@@ -10,6 +10,7 @@ body{
   background:#080814;display:flex;flex-direction:column;align-items:center;justify-content:center;
   min-height:100vh;font-family:'Segoe UI',Meiryo,Arial,sans-serif;color:#ddd;user-select:none;
   padding:8px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 h1{font-size:clamp(13px,3vw,20px);letter-spacing:clamp(3px,1.5vw,8px);color:#333;margin-bottom:10px;text-transform:uppercase}
 #hud{display:flex;align-items:stretch;gap:clamp(6px,2vw,16px);width:100%;max-width:800px;margin-bottom:8px}
@@ -108,9 +109,10 @@ let winGroup = [];
 let mouse    = null;
 let snapPos  = null;  // 現在のスナップ候補位置
 let mode     = 'pvp'; // 'pvp' | 'cpu'
-let touchActive = false; // タッチ操作中かどうか（プレビューを指の上に浮かせるため）
+let touchActive = false;
 const CPU_PL    = 2;
-const CPU_DELAY = 750; // ms
+const CPU_DELAY = 1500; // ms（タッチ操作時に何が起きたかわかるよう余裕を持たせる）
+const TOUCH_LIFT = 100; // タッチ時にスナップ位置を指より上にずらすオフセット（canvas単位）
 
 // ---- 幾何 ----
 function d2(a, b) { return (a.x-b.x)**2 + (a.y-b.y)**2; }
@@ -540,29 +542,10 @@ function draw() {
     if (snapPos) {
       const col    = turn===1 ? 'rgba(255,80,80,0.28)' : 'rgba(80,80,255,0.28)';
       const dotCol = turn===1 ? '#ff5555' : '#5577ff';
-
-      // タッチ中は指の上にプレビューを浮かせる（コールアウト）
-      const offsetY = touchActive ? -Math.min(120, snapPos.y - R - 8) : 0;
-      const px = snapPos.x;
-      const py = snapPos.y + offsetY;
-
       ctx.save();
-
-      if (touchActive && offsetY !== 0) {
-        // 実際に置かれる位置に小さなターゲットドット
-        ctx.fillStyle = `${dotCol.slice(0,7)}66`;
-        ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, 5, 0, Math.PI*2); ctx.fill();
-        // プレビューからターゲットへの点線
-        ctx.strokeStyle = 'rgba(200,200,200,0.25)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3,5]);
-        ctx.beginPath(); ctx.moveTo(px, py + R); ctx.lineTo(snapPos.x, snapPos.y); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // プレビュー円（浮かせた位置に描画）
+      // プレビュー円（snapPos がそのまま置かれる位置）
       ctx.fillStyle = col;
-      ctx.beginPath(); ctx.arc(px, py, R, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, R, 0, Math.PI*2); ctx.fill();
       ctx.strokeStyle = dotCol;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4,3]);
@@ -571,8 +554,7 @@ function draw() {
       // 中心ドット
       ctx.fillStyle = dotCol;
       ctx.shadowBlur = 6; ctx.shadowColor = dotCol;
-      ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fill();
-
+      ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, 3.5, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     } else if (circles.length > 0) {
       // 無効な位置 — 薄い×印
@@ -601,11 +583,11 @@ function canvasCoords(clientX, clientY) {
 }
 
 // ---- 円の配置処理（マウス・タッチ共通） ----
-function handlePlace(mx, my) {
+function handlePlace(mx, my, precomputed) {
   if (state !== 'play') return;
   if (mode === 'cpu' && turn === CPU_PL) return;
 
-  const pos = findSnap(mx, my);
+  const pos = precomputed || findSnap(mx, my);
   if (!pos) {
     msgEl.textContent = '⚠ そこには置けません。既存の円に接する位置を選んでください';
     return;
@@ -649,33 +631,36 @@ cv.addEventListener('click', e => {
 });
 
 // ---- タッチ入力 ----
+// 指の位置より TOUCH_LIFT 分上でスナップ計算 → プレビューが指で隠れない
+function touchSnap(clientX, clientY) {
+  const {x, y} = canvasCoords(clientX, clientY);
+  const ey = y - TOUCH_LIFT; // 指より上の有効位置
+  mouse = {x, y: ey};        // マウス位置も同じ高さに（×印表示用）
+  if (state === 'play') snapPos = findSnap(x, ey);
+}
+
 cv.addEventListener('touchstart', e => {
   e.preventDefault();
   touchActive = true;
-  const t = e.touches[0];
-  const {x, y} = canvasCoords(t.clientX, t.clientY);
-  mouse = {x, y};
-  if (state==='play') snapPos = findSnap(x, y);
+  touchSnap(e.touches[0].clientX, e.touches[0].clientY);
 }, {passive: false});
 
 cv.addEventListener('touchmove', e => {
   e.preventDefault();
   touchActive = true;
-  const t = e.touches[0];
-  const {x, y} = canvasCoords(t.clientX, t.clientY);
-  mouse = {x, y};
-  if (state==='play') snapPos = findSnap(x, y);
+  touchSnap(e.touches[0].clientX, e.touches[0].clientY);
 }, {passive: false});
 
 cv.addEventListener('touchend', e => {
   e.preventDefault();
-  // 指を離した位置で配置確定
-  const t = e.changedTouches[0];
-  const {x, y} = canvasCoords(t.clientX, t.clientY);
-  handlePlace(x, y);
+  // snapPos（プレビューが出ていた位置）に確定配置
+  const currentSnap = snapPos;
   touchActive = false;
   mouse = null;
   snapPos = null;
+  if (currentSnap) {
+    handlePlace(currentSnap.x, currentSnap.y, currentSnap);
+  }
 }, {passive: false});
 
 function startGame(selectedMode) {
