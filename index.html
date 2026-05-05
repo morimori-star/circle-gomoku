@@ -117,6 +117,9 @@ let mouse    = null;
 let snapPos  = null;  // 現在のスナップ候補位置
 let mode     = 'pvp'; // 'pvp' | 'cpu'
 let touchActive = false;
+let sealedSpots = []; // 封鎖中の座標 [{x, y, until}]  until はターン数
+let totalTurns  = 0;  // 累計配置数（封鎖の期限管理に使用）
+const SEAL_TURNS = 4; // 捕獲後に封鎖するターン数（両者2手ずつ）
 const CPU_PL    = 2;
 const CPU_DELAY = 1500; // ms（タッチ操作時に何が起きたかわかるよう余裕を持たせる）
 const TOUCH_LIFT = 100; // タッチ時にスナップ位置を指より上にずらすオフセット（canvas単位）
@@ -160,6 +163,9 @@ function findSnap(mx, my) {
 
     // 既存の円と重ならないかチェック
     if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) continue;
+
+    // 封鎖チェック
+    if (isSealed(sx, sy)) continue;
 
     // 禁手チェック（案1）：自殺手は不可。ただし同時に相手を捕獲できる場合は例外
     if (circles.length > 0) {
@@ -267,6 +273,11 @@ function getPressure(c, byPl) {
   return live().filter(o => o.p === byPl && touching(o, c)).length;
 }
 
+// 封鎖チェック：指定座標が現在封鎖中かどうか
+function isSealed(x, y) {
+  return sealedSpots.some(s => s.until > totalTurns && Math.hypot(x - s.x, y - s.y) < SNAP_DIST - 2);
+}
+
 // 気による捕獲処理：newCircle を置いた後、圧力 > 気 の相手円を捕獲
 function doQiCaptures(newCircle, pl) {
   const opp = pl === 1 ? 2 : 1;
@@ -275,6 +286,13 @@ function doQiCaptures(newCircle, pl) {
     return getPressure(c, pl) > getQi(c);
   });
   if (toCapture.length === 0) return 0;
+
+  // 捕獲された位置を封鎖（両者 SEAL_TURNS 手間置けない）
+  toCapture.forEach(c => {
+    sealedSpots.push({x: c.x, y: c.y, until: totalTurns + SEAL_TURNS});
+  });
+  // 期限切れの封鎖を掃除
+  sealedSpots = sealedSpots.filter(s => s.until > totalTurns);
 
   const t = performance.now();
   toCapture.forEach(c => { c.dying = true; c.dyingAt = t; });
@@ -296,6 +314,7 @@ function getCandidates() {
       if (sx < R+4 || sx > W-R-4 || sy < R+4 || sy > H-R-4) continue;
       if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) continue;
       if (cands.some(p => Math.hypot(p.x-sx, p.y-sy) < 6)) continue; // 重複除去
+      if (isSealed(sx, sy)) continue; // 封鎖チェック
       // 自殺手チェック（CPUも同じルール）
       const oppC = CPU_PL === 1 ? 2 : 1;
       const tmpC = {x: sx, y: sy, r: R, p: CPU_PL};
@@ -370,6 +389,7 @@ function cpuTurn() {
     return;
   }
 
+  totalTurns++;
   const captured = doQiCaptures(newCircle, CPU_PL);
   if (captured > 0) msgEl.textContent = `🤖 CPU が気で ${captured}個の円を取りました！`;
 
@@ -408,6 +428,30 @@ function draw() {
   ctx.lineWidth = 1;
   for (let x=0; x<=W; x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
   for (let y=0; y<=H; y+=40){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // 封鎖マーク（捕獲された場所）
+  for (const s of sealedSpots) {
+    const rem = s.until - totalTurns;
+    if (rem <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    // 薄い円と×マーク
+    ctx.strokeStyle = '#663333';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R * 0.55, 0, Math.PI*2); ctx.stroke();
+    const d = R * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(s.x-d, s.y-d); ctx.lineTo(s.x+d, s.y+d);
+    ctx.moveTo(s.x+d, s.y-d); ctx.lineTo(s.x-d, s.y+d);
+    ctx.stroke();
+    // 残りターン数
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#aa5555';
+    ctx.font = `bold ${R * 0.38}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(rem, s.x, s.y + R * 0.72);
+    ctx.restore();
+  }
 
   // 配置可能ゾーン（既存円の周囲にうっすら点線リング）
   if (state === 'play') {
@@ -653,6 +697,7 @@ function handlePlace(mx, my, precomputed) {
     return;
   }
 
+  totalTurns++;
   const captured = doQiCaptures(newCircle, turn);
   if (captured > 0) msgEl.textContent = `💨 ${captured}個の円を気で取りました！`;
 
@@ -711,6 +756,7 @@ cv.addEventListener('touchend', e => {
 function startGame(selectedMode) {
   mode = selectedMode;
   circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
+  sealedSpots=[]; totalTurns=0;
   document.getElementById('start').style.display = 'none';
   overEl.classList.remove('show');
   msgEl.textContent = 'クリックして最初の円を置いてください';
@@ -724,6 +770,7 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   overEl.classList.remove('show');
   document.getElementById('start').style.display = 'flex';
   circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
+  sealedSpots=[]; totalTurns=0;
   msgEl.textContent = '';
   updateHUD();
 });
