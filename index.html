@@ -355,7 +355,7 @@ function cpuTurn() {
   }
   if (!best) { turn = 1; updateHUD(); return; }
 
-  const newCircle = {x: best.x, y: best.y, r: R, p: CPU_PL};
+  const newCircle = {x: best.x, y: best.y, r: R, p: CPU_PL, justPlaced: performance.now()};
   circles.push(newCircle);
 
   const won = checkWin(CPU_PL);
@@ -482,6 +482,24 @@ function draw() {
       ctx.beginPath(); ctx.arc(c.x, c.y, R + 3, 0, Math.PI*2); ctx.fill();
       ctx.restore();
       continue;
+    }
+
+    // CPU が置いた直後の点滅（3回）
+    if (c.justPlaced) {
+      const elapsed = now - c.justPlaced;
+      const duration = 1200;
+      if (elapsed < duration) {
+        const pulse = Math.abs(Math.sin(elapsed * Math.PI / 400)); // 400msごとに1回＝3回
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,255,255,${0.85 * pulse})`;
+        ctx.lineWidth = 3.5;
+        ctx.shadowBlur = 24 * pulse;
+        ctx.shadowColor = '#aaccff';
+        ctx.beginPath(); ctx.arc(c.x, c.y, R + 9, 0, Math.PI*2); ctx.stroke();
+        ctx.restore();
+      } else {
+        delete c.justPlaced;
+      }
     }
 
     // 勝利グループのグロー
