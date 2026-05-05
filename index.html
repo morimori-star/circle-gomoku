@@ -301,34 +301,57 @@ function doQiCaptures(newCircle, pl) {
 }
 
 // ---- CPU AI ----
+// 候補座標の自殺手チェック共通処理
+function isValidCpuPos(sx, sy) {
+  if (sx < R+4 || sx > W-R-4 || sy < R+4 || sy > H-R-4) return false;
+  if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) return false;
+  if (isSealed(sx, sy)) return false;
+  const oppC = CPU_PL === 1 ? 2 : 1;
+  const tmpC = {x: sx, y: sy, r: R, p: CPU_PL};
+  circles.push(tmpC);
+  const ok = !(getPressure(tmpC, oppC) > getQi(tmpC) &&
+    !live().some(o => o !== tmpC && o.p === oppC && touching(o, tmpC) && getPressure(o, CPU_PL) > getQi(o)));
+  circles.pop();
+  return ok;
+}
+
 // 配置可能な候補座標を列挙
 function getCandidates() {
   if (circles.length === 0) return [{x: W/2, y: H/2}];
   const cands = [];
-  const STEPS = 36; // 10°刻み
+
+  // ① 全円から 48方向（7.5°刻み）の候補
+  const STEPS = 48;
   for (const c of circles) {
     for (let i = 0; i < STEPS; i++) {
       const angle = (i / STEPS) * Math.PI * 2;
       const sx = c.x + Math.cos(angle) * SNAP_DIST;
       const sy = c.y + Math.sin(angle) * SNAP_DIST;
-      if (sx < R+4 || sx > W-R-4 || sy < R+4 || sy > H-R-4) continue;
-      if (circles.some(e => Math.hypot(sx-e.x, sy-e.y) < SNAP_DIST - 2)) continue;
-      if (cands.some(p => Math.hypot(p.x-sx, p.y-sy) < 6)) continue; // 重複除去
-      if (isSealed(sx, sy)) continue; // 封鎖チェック
-      // 自殺手チェック（CPUも同じルール）
-      const oppC = CPU_PL === 1 ? 2 : 1;
-      const tmpC = {x: sx, y: sy, r: R, p: CPU_PL};
-      circles.push(tmpC);
-      const qiC    = getQi(tmpC);
-      const pressC = getPressure(tmpC, oppC);
-      const captC  = live().some(o =>
-        o !== tmpC && o.p === oppC && touching(o, tmpC) && getPressure(o, CPU_PL) > getQi(o)
-      );
-      circles.pop();
-      if (pressC > qiC && !captC) continue;
+      if (!isValidCpuPos(sx, sy)) continue;
+      if (cands.some(p => Math.hypot(p.x-sx, p.y-sy) < 6)) continue;
       cands.push({x: sx, y: sy});
     }
   }
+
+  // ② 両プレイヤーのチェーン端に延長方向の候補を追加（見逃し防止）
+  for (const pl of [1, 2]) {
+    for (const chain of getLineChains(pl)) {
+      if (chain.length < 2) continue;
+      const ends = [
+        [chain[1],              chain[0]],
+        [chain[chain.length-2], chain[chain.length-1]]
+      ];
+      for (const [from, to] of ends) {
+        const dir = Math.atan2(to.y - from.y, to.x - from.x);
+        const sx  = to.x + Math.cos(dir) * SNAP_DIST;
+        const sy  = to.y + Math.sin(dir) * SNAP_DIST;
+        if (!isValidCpuPos(sx, sy)) continue;
+        if (cands.some(p => Math.hypot(p.x-sx, p.y-sy) < 6)) continue;
+        cands.push({x: sx, y: sy});
+      }
+    }
+  }
+
   return cands;
 }
 
@@ -336,31 +359,30 @@ function getCandidates() {
 function scoreMove(pos) {
   const opp = 1;
 
-  // CPUが置いた場合
+  // ---- CPU が置いた場合の評価 ----
   const tmp = {x: pos.x, y: pos.y, r: R, p: CPU_PL};
   circles.push(tmp);
   if (checkWin(CPU_PL)) { circles.pop(); return 10000; }
-  const myChains = getLineChains(CPU_PL).filter(ch => ch.includes(tmp));
-  const myBest   = myChains.reduce((m, ch) => Math.max(m, ch.length), 1);
-  // 気で捕獲できる相手の円の数
-  const captureCount = live().filter(c => {
-    if (c.p !== opp || !touching(c, tmp)) return false;
-    return getPressure(c, CPU_PL) > getQi(c);
-  }).length;
+  const myChains  = getLineChains(CPU_PL).filter(ch => ch.includes(tmp));
+  const myBest    = myChains.reduce((m, ch) => Math.max(m, ch.length), 1);
+  const my4Count  = myChains.filter(ch => ch.length >= 4).length; // 4連チェーン数
+  const captureCount = live().filter(c =>
+    c.p === opp && touching(c, tmp) && getPressure(c, CPU_PL) > getQi(c)
+  ).length;
   circles.pop();
 
-  // 相手が置いた場合（ブロック評価）
+  // ---- 相手が置いた場合（防御評価） ----
   const tmp2 = {x: pos.x, y: pos.y, r: R, p: opp};
   circles.push(tmp2);
-  const oppWin    = !!checkWin(opp);
-  const oppChains = getLineChains(opp).filter(ch => ch.includes(tmp2));
-  const oppBest   = oppChains.reduce((m, ch) => Math.max(m, ch.length), 0);
+  const oppWin     = !!checkWin(opp);
+  const oppChains  = getLineChains(opp).filter(ch => ch.includes(tmp2));
+  const oppBest    = oppChains.reduce((m, ch) => Math.max(m, ch.length), 0);
+  const opp4Count  = oppChains.filter(ch => ch.length >= 4).length; // 相手4連チェーン数
   circles.pop();
 
-  if (oppWin) return 5000;
+  if (oppWin) return 5000; // 相手の即勝をブロック
 
   // ---- 封鎖脅威チェック ----
-  // 封鎖中の座標を相手の仮想円として追加し、封鎖解除後に相手が勝てるか判定
   const virtualOpp = sealedSpots
     .filter(s => s.until > totalTurns)
     .map(s => ({x: s.x, y: s.y, r: R, p: opp}));
@@ -371,11 +393,30 @@ function scoreMove(pos) {
     virtualOpp.forEach(() => circles.pop());
   }
 
-  // 封鎖解除後に相手が勝てる → CPU は自分の勝ちを急ぐ（攻勢係数を大幅アップ）
-  const offMult = sealedWinThreat ? 5 : 1;
+  // ---- 優先度順スコア ----
+
+  // CPU がダブル4連（二刀流）を作れる → 相手はブロックしきれず確実に勝てる
+  if (my4Count >= 2) return 9500;
+
+  // CPU が4連を作れる → 次の手で勝ち
+  if (myBest >= 4) return 4800 + captureCount * 100;
+
+  // 相手がダブル4連を作れる位置 → 最優先でブロック
+  if (opp4Count >= 2) return 4700;
+
+  // 相手が4連を作れる位置 → ブロック必須
+  if (oppBest >= 4) return 4600 + myBest * 50;
+
+  // 封鎖解除後に相手が勝てる → 自分の勝ちを急ぐ（攻勢係数5倍）
+  const offMult  = sealedWinThreat ? 5 : 1;
   const capBonus = sealedWinThreat ? captureCount * 400 : captureCount * 280;
 
-  return myBest * myBest * 20 * offMult + oppBest * 35 + capBonus + Math.random() * 8;
+  // 通常評価：攻撃（二乗×28）＋防御（二乗×22）
+  // 二乗スケーリングにより3連鎖の脅威を大幅に重視
+  const offScore = myBest  * myBest  * 28 * offMult;
+  const defScore = oppBest * oppBest * 22;
+
+  return offScore + defScore + capBonus + Math.random() * 8;
 }
 
 // CPUのターン処理
