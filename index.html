@@ -492,22 +492,28 @@ function draw() {
     const rem = s.until - totalTurns;
     if (rem <= 0) continue;
     ctx.save();
-    ctx.globalAlpha = 0.55;
-    // 薄い円と×マーク
-    ctx.strokeStyle = '#663333';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(s.x, s.y, R * 0.55, 0, Math.PI*2); ctx.stroke();
-    const d = R * 0.32;
+    // 背景塗りつぶし（暗い赤）
+    ctx.fillStyle = 'rgba(80,10,10,0.82)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, R * 0.72, 0, Math.PI*2); ctx.fill();
+    // 縁取り
+    ctx.strokeStyle = '#cc2222';
+    ctx.lineWidth = 2.5;
+    ctx.shadowBlur = 8; ctx.shadowColor = '#ff0000';
+    ctx.beginPath(); ctx.arc(s.x, s.y, R * 0.72, 0, Math.PI*2); ctx.stroke();
+    // ×マーク
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 3;
+    const d = R * 0.38;
     ctx.beginPath();
     ctx.moveTo(s.x-d, s.y-d); ctx.lineTo(s.x+d, s.y+d);
     ctx.moveTo(s.x+d, s.y-d); ctx.lineTo(s.x-d, s.y+d);
     ctx.stroke();
-    // 残りターン数
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = '#aa5555';
-    ctx.font = `bold ${R * 0.38}px sans-serif`;
+    // 残りターン数（×の下）
+    ctx.fillStyle = '#ffaaaa';
+    ctx.font = `bold ${R * 0.44}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(rem, s.x, s.y + R * 0.72);
+    ctx.fillText(rem, s.x, s.y + R * 0.88);
     ctx.restore();
   }
 
