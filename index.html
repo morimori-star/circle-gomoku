@@ -358,7 +358,24 @@ function scoreMove(pos) {
   circles.pop();
 
   if (oppWin) return 5000;
-  return myBest * myBest * 20 + oppBest * 35 + captureCount * 280 + Math.random() * 8;
+
+  // ---- 封鎖脅威チェック ----
+  // 封鎖中の座標を相手の仮想円として追加し、封鎖解除後に相手が勝てるか判定
+  const virtualOpp = sealedSpots
+    .filter(s => s.until > totalTurns)
+    .map(s => ({x: s.x, y: s.y, r: R, p: opp}));
+  let sealedWinThreat = false;
+  if (virtualOpp.length > 0) {
+    virtualOpp.forEach(v => circles.push(v));
+    sealedWinThreat = !!checkWin(opp);
+    virtualOpp.forEach(() => circles.pop());
+  }
+
+  // 封鎖解除後に相手が勝てる → CPU は自分の勝ちを急ぐ（攻勢係数を大幅アップ）
+  const offMult = sealedWinThreat ? 5 : 1;
+  const capBonus = sealedWinThreat ? captureCount * 400 : captureCount * 280;
+
+  return myBest * myBest * 20 * offMult + oppBest * 35 + capBonus + Math.random() * 8;
 }
 
 // CPUのターン処理
