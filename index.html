@@ -32,14 +32,29 @@ h1{font-size:clamp(13px,3vw,20px);letter-spacing:clamp(3px,1.5vw,8px);color:#333
 canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radius:6px;cursor:crosshair;touch-action:none}
 #msg{margin-top:8px;font-size:clamp(11px,3vw,14px);text-align:center;color:#777;letter-spacing:1px;min-height:18px;width:100%;max-width:800px}
 #rules{margin-top:6px;font-size:clamp(9px,2.2vw,11px);color:#666;text-align:center;max-width:800px;line-height:1.7;padding:0 4px}
-#over{display:none;position:absolute;inset:0;background:rgba(4,4,16,.88);border-radius:6px;
-      flex-direction:column;align-items:center;justify-content:center;gap:16px}
+/* ゲーム終了 大テキスト（盤面を暗転させない） */
+#over{display:none;position:absolute;inset:0;border-radius:6px;
+      flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
 #over.show{display:flex}
-#over-title{font-size:clamp(22px,7vw,36px);font-weight:bold;letter-spacing:3px}
+#over-title{font-size:clamp(36px,10vw,64px);font-weight:bold;letter-spacing:4px;
+  text-shadow:0 0 30px currentColor, 0 0 60px currentColor, 0 2px 12px #000;
+  animation:overpop .35s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes overpop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* コーナーバッジ（大テキスト後に表示） */
+#over-corner{display:none;position:absolute;top:10px;right:10px;
+  background:rgba(4,4,16,0.88);border-radius:8px;padding:6px 14px;
+  border:1px solid #333;pointer-events:none}
+#over-corner.show{display:block}
+#over-corner-title{font-size:clamp(11px,3vw,14px);font-weight:bold;letter-spacing:2px}
+
+/* RESTARTボタン（盤面の下） */
+#restart-area{display:none;text-align:center;margin-top:12px}
+#restart-area.show{display:block}
 #btn-restart{padding:10px 38px;font-size:clamp(12px,3.5vw,15px);letter-spacing:3px;text-transform:uppercase;
   background:#111;color:#aaa;border:2px solid #2a2a3a;border-radius:8px;
   cursor:pointer;transition:all .2s}
-#btn-restart:hover{background:#1a1a2e;border-color:#555;color:#eee}
+#btn-restart:hover,#btn-restart:active{background:#1a1a2e;border-color:#555;color:#eee}
 #start{position:absolute;inset:0;background:rgba(4,4,16,.96);border-radius:6px;
        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
 #start-label{font-size:clamp(9px,2.5vw,11px);letter-spacing:3px;color:#444;text-transform:uppercase}
@@ -77,10 +92,18 @@ canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radi
     <button class="btn-mode" id="btn-pvp">👥 Player vs Player</button>
     <button class="btn-mode" id="btn-cpu">🤖 Player vs CPU</button>
   </div>
+  <!-- 大テキスト（一時表示・盤面は透けて見える） -->
   <div id="over">
     <div id="over-title">WINNER!</div>
-    <button id="btn-restart">RESTART</button>
   </div>
+  <!-- コーナーバッジ（大テキスト後に残る小表示） -->
+  <div id="over-corner">
+    <div id="over-corner-title"></div>
+  </div>
+</div>
+<!-- RESTARTボタンは盤面の下 -->
+<div id="restart-area">
+  <button id="btn-restart">RESTART</button>
 </div>
 <div id="msg">クリックして最初の円を置いてください</div>
 <div id="rules">
@@ -105,9 +128,12 @@ const SNAP_RANGE = R * 3.5; // クリック有効範囲
 
 const cv  = document.getElementById('cv');
 const ctx = cv.getContext('2d');
-const msgEl = document.getElementById('msg');
-const overEl = document.getElementById('over');
-const overTitle = document.getElementById('over-title');
+const msgEl       = document.getElementById('msg');
+const overEl      = document.getElementById('over');
+const overTitle   = document.getElementById('over-title');
+const overCorner  = document.getElementById('over-corner');
+const overCornerTitle = document.getElementById('over-corner-title');
+const restartArea = document.getElementById('restart-area');
 
 let circles  = [];  // {x, y, r, p}
 let turn     = 1;
@@ -439,11 +465,7 @@ function cpuTurn() {
   if (won) {
     winGroup = won;
     state = 'over';
-    overTitle.textContent = 'CPU WIN!';
-    overTitle.style.color = '#5555ff';
-    msgEl.textContent = `CPU が ${won.length} 個直線に並べました！`;
-    updateHUD();
-    setTimeout(() => overEl.classList.add('show'), 2500);
+    showWin('CPU WIN!', '#5555ff', `CPU が ${won.length} 個直線に並べました！`);
     return;
   }
 
@@ -770,11 +792,8 @@ function handlePlace(mx, my, precomputed) {
   if (won) {
     winGroup = won;
     state = 'over';
-    overTitle.textContent = `PLAYER ${turn} WIN!`;
-    overTitle.style.color = turn===1 ? '#ff5555' : '#5555ff';
-    msgEl.textContent = `🎉 Player ${turn} が ${won.length} 個直線に並べました！`;
-    updateHUD();
-    setTimeout(() => overEl.classList.add('show'), 2500);
+    const col = turn===1 ? '#ff5555' : '#5555ff';
+    showWin(`PLAYER ${turn} WIN!`, col, `🎉 Player ${turn} が ${won.length} 個直線に並べました！`);
     return;
   }
 
@@ -834,12 +853,32 @@ cv.addEventListener('touchend', e => {
   }
 }, {passive: false});
 
+// ---- 勝利表示 ----
+function showWin(title, color, msg) {
+  overTitle.textContent = title;
+  overTitle.style.color = color;
+  msgEl.textContent = msg;
+  updateHUD();
+  // ① 大テキストを即表示（盤面は透けて見える）
+  overEl.classList.add('show');
+  // ② 2.5秒後：大テキストを消してコーナーバッジ＋RESTARTを表示
+  setTimeout(() => {
+    overEl.classList.remove('show');
+    overCornerTitle.textContent = title;
+    overCornerTitle.style.color = color;
+    overCorner.classList.add('show');
+    restartArea.classList.add('show');
+  }, 2500);
+}
+
 function startGame(selectedMode) {
   mode = selectedMode;
   circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
   sealedSpots=[]; totalTurns=0;
   document.getElementById('start').style.display = 'none';
   overEl.classList.remove('show');
+  overCorner.classList.remove('show');
+  restartArea.classList.remove('show');
   msgEl.textContent = 'クリックして最初の円を置いてください';
   updateHUD();
 }
@@ -849,6 +888,8 @@ document.getElementById('btn-cpu').addEventListener('click', () => startGame('cp
 
 document.getElementById('btn-restart').addEventListener('click', () => {
   overEl.classList.remove('show');
+  overCorner.classList.remove('show');
+  restartArea.classList.remove('show');
   document.getElementById('start').style.display = 'flex';
   circles=[]; turn=1; state='play'; winGroup=[]; snapPos=null;
   sealedSpots=[]; totalTurns=0;
