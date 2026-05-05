@@ -529,13 +529,33 @@ function draw() {
     const chains = getLineChains(pl);
     for (const chain of chains) {
       if (chain.length < 3) continue;
-      const t = Math.min(1, (chain.length - 1) / (WIN_N - 1)); // 0〜1
-      const alpha = 0.35 + t * 0.45;  // 0.35〜0.80
       ctx.save();
-      ctx.strokeStyle = pl === 1
-        ? `rgba(255,200,100,${alpha})`
-        : `rgba(100,200,255,${alpha})`;
-      ctx.lineWidth = 1.5;
+
+      let strokeStyle, lineWidth, shadowBlur, shadowColor;
+      if (chain.length >= 5) {
+        // 5個：勝利色（金／水色）＋グロー
+        strokeStyle  = pl === 1 ? 'rgba(255,210,0,0.95)'  : 'rgba(0,230,255,0.95)';
+        lineWidth    = 3;
+        shadowBlur   = 12;
+        shadowColor  = pl === 1 ? '#ffcc00' : '#00eeff';
+      } else if (chain.length === 4) {
+        // 4個：警告色（オレンジ／シアン）
+        strokeStyle  = pl === 1 ? 'rgba(255,130,0,0.85)'  : 'rgba(0,200,255,0.85)';
+        lineWidth    = 2.5;
+        shadowBlur   = 6;
+        shadowColor  = pl === 1 ? '#ff8800' : '#00ccff';
+      } else {
+        // 3個：控えめな色
+        strokeStyle  = pl === 1 ? 'rgba(255,180,100,0.45)' : 'rgba(100,180,255,0.45)';
+        lineWidth    = 1.5;
+        shadowBlur   = 0;
+        shadowColor  = 'transparent';
+      }
+
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth   = lineWidth;
+      ctx.shadowBlur  = shadowBlur;
+      ctx.shadowColor = shadowColor;
       ctx.beginPath();
       ctx.moveTo(chain[0].x, chain[0].y);
       for (let i = 1; i < chain.length; i++) ctx.lineTo(chain[i].x, chain[i].y);
