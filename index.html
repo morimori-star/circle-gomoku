@@ -71,7 +71,7 @@ canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radi
 </div>
 
 <div id="wrap">
-  <canvas id="cv" width="800" height="540"></canvas>
+  <canvas id="cv" width="800" height="620"></canvas>
   <div id="start">
     <div id="start-label">Mode Select</div>
     <button class="btn-mode" id="btn-pvp">👥 Player vs Player</button>
@@ -97,7 +97,7 @@ canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radi
 </div>
 
 <script>
-const W = 800, H = 540;
+const W = 800, H = 620;
 const R = 36;          // 円の半径
 const WIN_N = 5;       // 勝利に必要な連結数
 const SNAP_DIST = 2*R; // スナップ距離（ちょうど接触）
@@ -709,6 +709,23 @@ function draw() {
       ctx.shadowBlur = 6; ctx.shadowColor = dotCol;
       ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, 3.5, 0, Math.PI*2); ctx.fill();
       ctx.restore();
+
+      // 接点の光るドット（プレビュー円が接している既存の円との接触点）
+      const touching_circles = live().filter(c =>
+        Math.abs(Math.hypot(snapPos.x - c.x, snapPos.y - c.y) - SNAP_DIST) < 8
+      );
+      for (const tc of touching_circles) {
+        const cx = (snapPos.x + tc.x) / 2;
+        const cy = (snapPos.y + tc.y) / 2;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 16; ctx.shadowColor = '#ffffff';
+        ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = dotCol;
+        ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
     } else if (circles.length > 0) {
       // 無効な位置 — 薄い×印
       ctx.save();
