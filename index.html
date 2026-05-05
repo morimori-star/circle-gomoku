@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-<title>Circle Gomoku</title>
+<title>Ring-Link 5</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{
@@ -12,7 +12,9 @@ body{
   padding:8px;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
-h1{font-size:clamp(13px,3vw,20px);letter-spacing:clamp(3px,1.5vw,8px);color:#333;margin-bottom:10px;text-transform:uppercase}
+h1{font-size:clamp(22px,5.5vw,38px);letter-spacing:clamp(4px,2vw,12px);margin-bottom:12px;text-transform:uppercase}
+h1 .logo-main{color:#777;text-shadow:0 0 18px rgba(160,160,200,0.25)}
+h1 .logo-num{color:#8899cc;text-shadow:0 0 20px rgba(100,120,220,0.45)}
 #hud{display:flex;align-items:stretch;gap:clamp(6px,2vw,16px);width:100%;max-width:800px;margin-bottom:8px}
 .pcard{flex:1;border-radius:10px;padding:clamp(6px,2vw,12px) clamp(8px,2.5vw,18px);text-align:center;transition:opacity .3s,box-shadow .3s}
 .p1{background:rgba(200,50,50,.12);border:2px solid #993333}
@@ -66,7 +68,7 @@ canvas{display:block;width:100%;height:auto;border:1px solid #161628;border-radi
 </style>
 </head>
 <body>
-<h1>Circle Gomoku</h1>
+<h1><span class="logo-main">Ring-Link</span> <span class="logo-num">5</span></h1>
 
 <div id="hud">
   <div class="pcard p1 on" id="pc1">
@@ -732,10 +734,8 @@ function draw() {
       ctx.beginPath(); ctx.arc(snapPos.x, snapPos.y, 3.5, 0, Math.PI*2); ctx.fill();
       ctx.restore();
 
-      // 接点の光るドット（プレビュー円が接している既存の円との接触点）
-      const touching_circles = live().filter(c =>
-        Math.abs(Math.hypot(snapPos.x - c.x, snapPos.y - c.y) - SNAP_DIST) < 8
-      );
+      // 接点の光るドット（ゲームと同じ touching() で判定）
+      const touching_circles = live().filter(c => touching(snapPos, c));
       for (const tc of touching_circles) {
         const cx = (snapPos.x + tc.x) / 2;
         const cy = (snapPos.y + tc.y) / 2;
